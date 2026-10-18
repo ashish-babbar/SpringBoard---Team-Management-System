@@ -13,6 +13,7 @@ const taskSchema = new mongoose.Schema({
   description: { type: String, trim: true, maxlength: 3000, default: '' },
   team: { type: String, trim: true, maxlength: 80, default: 'General', index: true },
   assigneeId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+  assigneeIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], default: [], index: true },
   priority: { type: String, enum: ['High', 'Medium', 'Low'], default: 'Medium', index: true },
   status: { type: String, enum: ['Todo', 'In progress', 'Done'], default: 'Todo', index: true },
   dueDate: { type: String, default: '' },

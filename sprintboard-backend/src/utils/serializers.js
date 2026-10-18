@@ -9,14 +9,28 @@ export function userDto(user) {
   };
 }
 export function taskDto(task) {
-  const populated = task.assigneeId && typeof task.assigneeId === 'object' && task.assigneeId.name;
+  const assignedUsers = Array.isArray(task.assigneeIds)
+    ? task.assigneeIds.filter((user) => user && typeof user === 'object' && user.name)
+    : [];
+  const legacyAssignee = task.assigneeId && typeof task.assigneeId === 'object' && task.assigneeId.name
+    ? task.assigneeId
+    : null;
+  const assignees = assignedUsers.length ? assignedUsers : (legacyAssignee ? [legacyAssignee] : []);
+  const firstAssignee = assignees[0] || null;
   const creator = task.createdBy && typeof task.createdBy === 'object' && task.createdBy.name;
+  const assigneeIds = task.assigneeIds?.length
+    ? task.assigneeIds.map((user) => String(user._id || user.id || user))
+    : (task.assigneeId ? [String(task.assigneeId._id || task.assigneeId)] : []);
   return {
     id: task.taskCode || String(task._id), _id: String(task._id),
     title: task.title, description: task.description || '', team: task.team || 'General',
-    assigneeId: populated ? String(task.assigneeId._id) : (task.assigneeId ? String(task.assigneeId) : ''),
-    assignee: populated ? task.assigneeId.name : '',
-    assigneeAvatar: populated && task.assigneeId.avatarFileId ? `${apiPrefix()}/files/${encodeURIComponent(task.assigneeId.avatarFileId)}` : '',
+    assigneeIds, assignees: assignees.map((user) => ({
+      id: String(user._id || user.id), name: user.name,
+      avatarUrl: user.avatarFileId ? `${apiPrefix()}/files/${encodeURIComponent(user.avatarFileId)}` : ''
+    })),
+    assigneeId: assigneeIds[0] || '',
+    assignee: firstAssignee?.name || '',
+    assigneeAvatar: firstAssignee?.avatarFileId ? `${apiPrefix()}/files/${encodeURIComponent(firstAssignee.avatarFileId)}` : '',
     priority: task.priority, status: task.status, dueDate: task.dueDate || '',
     createdBy: creator || (task.createdBy ? String(task.createdBy) : ''),
     attachments: (task.attachments || []).map((a) => ({ fileId: a.fileId, name: a.name, size: a.size, url: a.url, uploadedAt: a.uploadedAt, uploadedBy: a.uploadedBy ? String(a.uploadedBy) : '' })),

@@ -70,7 +70,7 @@ All successful responses are JSON with `{ "data": ... }` unless a `204 No Conten
 | `POST` | `/api/auth/forgot-password` | `{ email }`; generic response to prevent account enumeration |
 | `POST` | `/api/auth/reset-password` | `{ token, password }`; one-time 30-minute token; password must be 12+ characters |
 | `GET` | `/api/tasks` | Admin: all tasks; Employee: assigned tasks only; supports `page`, `limit`, `q`, `status`, `priority`, `team`, `assigneeId`, `dueBefore`, `dueAfter`, `sortBy`, `order` |
-| `POST` | `/api/tasks` | Admin; creates and optionally assigns a task |
+| `POST` | `/api/tasks` | Admin; creates and optionally assigns a task with `assigneeIds: [...]` |
 | `GET` | `/api/tasks/:id` | Admin or assigned employee; accepts task code (`SB-0001`) or Mongo ObjectId |
 | `PATCH` | `/api/tasks/:id` | Admin task editing/assignment |
 | `PATCH` | `/api/tasks/:id/status` | Admin, or assigned employee changing status only |
@@ -94,7 +94,7 @@ All successful responses are JSON with `{ "data": ... }` unless a `204 No Conten
 
 - `User`: role (`Admin`/`Employee`), bcrypt password hash, active flag, workspace team name, avatar file ID.
 - `Session`: hash of a random opaque session token, per-session CSRF hash, expiry and revocation state. Plain session tokens are only sent as cookies and are never stored in MongoDB.
-- `Task`: readable code, title, description, team, assignee reference, priority, status, due date, and file metadata.
+- `Task`: readable code, title, description, team, assignee references, priority, status, due date, and file metadata. Employee task access, status updates, and attachment access apply to every assignee. The legacy `assigneeId` field is retained for older records and clients.
 - `Team`, `Notification`, `ActivityLog`, `Counter`, `PasswordReset`, and `FileAsset` support the relevant UI/API flows.
 
 ## Security implemented

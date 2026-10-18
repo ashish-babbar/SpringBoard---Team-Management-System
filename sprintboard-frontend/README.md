@@ -48,9 +48,9 @@ Successful endpoints may return the resource directly or inside `{ "data": ... }
 - `POST /auth/logout` — invalidates the session/cookie server-side.
 - `POST /auth/forgot-password` — accepts `{ email }`; always use a generic response to avoid account enumeration.
 - `GET /tasks` — task list, optionally `{ items: [...] }` in the response.
-- `POST /tasks` — creates a task.
+- `POST /tasks` — creates a task; send selected member IDs in `assigneeIds`.
 - `PATCH /tasks/:id` — admin task update.
-- `PATCH /tasks/:id/status` — status-only employee update; the server must verify task assignment.
+- `PATCH /tasks/:id/status` — status-only employee update; the server verifies that the employee is among the task's assignees.
 - `POST /tasks/:id/attachments` — multipart field `attachment`.
 - `GET /teams`, `POST /teams`
 - `GET /users`, `POST /users/invite`

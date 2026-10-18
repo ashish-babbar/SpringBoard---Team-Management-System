@@ -79,7 +79,9 @@ export function WorkspaceProvider({ children }) {
 
   const createTask = useCallback(async (payload) => {
     if (DEMO_MODE) {
-      const next = { ...payload, id: `SB-${String(Date.now()).slice(-4)}`, attachments: [], updatedAt: new Date().toISOString(), createdBy: user?.name || "Ashish Babbar" };
+      const assigneeIds = payload.assigneeIds || [];
+      const assignees = members.filter((member) => assigneeIds.includes(String(member.id || member._id)));
+      const next = { ...payload, assigneeIds, assignees, assigneeId: assigneeIds[0] || "", assignee: assignees[0]?.name || "", assigneeAvatar: assignees[0]?.avatarUrl || "", id: `SB-${String(Date.now()).slice(-4)}`, attachments: [], updatedAt: new Date().toISOString(), createdBy: user?.name || "Ashish Babbar" };
       setTasks((old) => [next, ...old]);
       return next;
     }
@@ -87,7 +89,7 @@ export function WorkspaceProvider({ children }) {
     const task = created?.task || created;
     setTasks((old) => [task, ...old]);
     return task;
-  }, [user]);
+  }, [members, user]);
 
   const updateTask = useCallback(async (id, patch) => {
     if (DEMO_MODE) {

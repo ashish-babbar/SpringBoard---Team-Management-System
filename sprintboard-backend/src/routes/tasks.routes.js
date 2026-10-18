@@ -24,6 +24,7 @@ const taskFields = {
   team: z.string().trim().min(1).max(80).optional(),
   assignee: z.string().trim().max(100).optional(),
   assigneeId: z.string().trim().max(64).optional(),
+  assigneeIds: z.array(z.string().trim().max(64)).max(50).optional(),
   priority: z.enum(priorityValues).optional(),
   status: z.enum(statusValues).optional(),
   dueDate: z.string().trim().max(10).optional()
@@ -32,6 +33,7 @@ const createSchema = z.object({
   title: z.string().trim().min(3).max(120), description: z.string().trim().max(3000).default(''),
   team: z.string().trim().min(1).max(80).default('General'), assignee: z.string().trim().max(100).optional().default(''),
   assigneeId: z.string().trim().max(64).optional().default(''), priority: z.enum(priorityValues).default('Medium'),
+  assigneeIds: z.array(z.string().trim().max(64)).max(50).optional(),
   status: z.enum(statusValues).default('Todo'), dueDate: z.string().trim().max(10).default(''), attachments: z.array(z.unknown()).max(20).optional()
 }).strict();
 const updateSchema = z.object(taskFields).strict().refine((v) => Object.keys(v).length > 0, 'Provide at least one field to update.');
@@ -41,7 +43,7 @@ async function findTask(rawId) {
   const key = String(rawId || '');
   const where = [{ taskCode: key }];
   if (isObjectId(key)) where.push({ _id: key });
-  return Task.findOne({ $or: where }).populate('assigneeId', 'name avatarFileId').populate('createdBy', 'name');
+  return Task.findOne({ $or: where }).populate('assigneeId', 'name avatarFileId').populate('assigneeIds', 'name avatarFileId').populate('createdBy', 'name');
 }
 async function resolveAssignee(input) {
   const id = String(input.assigneeId || '').trim();
@@ -50,6 +52,19 @@ async function resolveAssignee(input) {
     const user = await User.findOne({ _id: id, isActive: true });
     if (!user) throw badRequest('The selected assignee is not an active workspace member.');
     return user;
+  }
+  async function resolveAssignees(input) {
+    if (!Array.isArray(input.assigneeIds)) {
+      const assignee = await resolveAssignee(input);
+      return assignee ? [assignee] : [];
+    }
+    const ids = [...new Set(input.assigneeIds.map((id) => String(id).trim()))];
+    if (ids.some((id) => !isObjectId(id))) throw badRequest('Invalid assignee identifier.');
+    if (!ids.length) return [];
+    const users = await User.find({ _id: { $in: ids }, isActive: true });
+    if (users.length !== ids.length) throw badRequest('One or more selected assignees are not active workspace members.');
+    const byId = new Map(users.map((user) => [String(user._id), user]));
+    return ids.map((id) => byId.get(id));
   }
   if (id) throw badRequest('Invalid assignee identifier.');
   if (name) {
@@ -76,18 +91,19 @@ async function nextTaskCode() {
   return `SB-${String(counter.seq).padStart(4, '0')}`;
 }
 async function populateTask(taskId) {
-  return Task.findById(taskId).populate('assigneeId', 'name avatarFileId').populate('createdBy', 'name');
+  return Task.findById(taskId).populate('assigneeId', 'name avatarFileId').populate('assigneeIds', 'name avatarFileId').populate('createdBy', 'name');
 }
 async function canReadTask(task, user) {
   if (user.role === 'Admin') return true;
-  return Boolean(task.assigneeId && String(task.assigneeId._id || task.assigneeId) === String(user._id));
+  const assigneeIds = task.assigneeIds?.length ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
+  return assigneeIds.some((assignee) => String(assignee._id || assignee) === String(user._id));
 }
 
 router.get('/', requireAuth, asyncHandler(async (req, res) => {
   const page = Math.max(1, Math.min(10000, Number.parseInt(req.query.page || '1', 10) || 1));
   const limit = Math.max(1, Math.min(100, Number.parseInt(req.query.limit || '100', 10) || 100));
   const query = {};
-  if (req.user.role !== 'Admin') query.assigneeId = req.user._id;
+  if (req.user.role !== 'Admin') query.$and = [{ $or: [{ assigneeIds: req.user._id }, { assigneeIds: { $exists: false }, assigneeId: req.user._id }, { assigneeIds: { $size: 0 }, assigneeId: req.user._id }] }];
   const status = String(req.query.status || '').trim();
   const priority = String(req.query.priority || '').trim();
   if (status) { if (!statusValues.includes(status)) throw badRequest('Invalid status filter.'); query.status = status; }
@@ -95,7 +111,7 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
   if (req.query.team) query.team = String(req.query.team).slice(0, 80);
   if (req.query.assigneeId && req.user.role === 'Admin') {
     if (!isObjectId(String(req.query.assigneeId))) throw badRequest('Invalid assignee filter.');
-    query.assigneeId = req.query.assigneeId;
+    query.$and = [...(query.$and || []), { $or: [{ assigneeIds: req.query.assigneeId }, { assigneeIds: { $exists: false }, assigneeId: req.query.assigneeId }, { assigneeIds: { $size: 0 }, assigneeId: req.query.assigneeId }] }];
   }
   const q = String(req.query.q || req.query.search || '').trim().slice(0, 100);
   if (q) {
@@ -107,7 +123,7 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
   const sortKey = ['dueDate', 'priority', 'title', 'createdAt', 'updatedAt', 'status'].includes(req.query.sortBy) ? req.query.sortBy : 'createdAt';
   const sortOrder = String(req.query.order || 'desc').toLowerCase() === 'asc' ? 1 : -1;
   const [docs, total] = await Promise.all([
-    Task.find(query).sort({ [sortKey]: sortOrder, _id: -1 }).skip((page - 1) * limit).limit(limit).populate('assigneeId', 'name avatarFileId').populate('createdBy', 'name'),
+    Task.find(query).sort({ [sortKey]: sortOrder, _id: -1 }).skip((page - 1) * limit).limit(limit).populate('assigneeId', 'name avatarFileId').populate('assigneeIds', 'name avatarFileId').populate('createdBy', 'name'),
     Task.countDocuments(query)
   ]);
   res.set('Cache-Control', 'no-store').json({ data: { items: docs.map(taskDto), pagination: { page, limit, total, pages: Math.ceil(total / limit) } } });
@@ -115,12 +131,12 @@ router.get('/', requireAuth, asyncHandler(async (req, res) => {
 
 router.post('/', requireAuth, requireRole('Admin'), validateBody(createSchema), asyncHandler(async (req, res) => {
   const input = req.validatedBody;
-  const assignee = await resolveAssignee(input);
+  const assignees = await resolveAssignees(input);
   const team = await validateTeam(input.team);
   const dueDate = parseDueDate(input.dueDate);
-  const task = await Task.create({ taskCode: await nextTaskCode(), title: input.title, description: input.description, team, assigneeId: assignee?._id || null, priority: input.priority, status: input.status, dueDate, createdBy: req.user._id });
+  const task = await Task.create({ taskCode: await nextTaskCode(), title: input.title, description: input.description, team, assigneeIds: assignees.map((user) => user._id), assigneeId: assignees[0]?._id || null, priority: input.priority, status: input.status, dueDate, createdBy: req.user._id });
   await logActivity({ actorId: req.user._id, action: 'task_created', entityType: 'task', entityId: task.taskCode, summary: `${req.user.name} created ${task.title}` });
-  if (assignee && String(assignee._id) !== String(req.user._id)) await notifyUser({ userId: assignee._id, title: 'New task assigned', message: `${req.user.name} assigned you “${task.title}”.`, type: 'task', relatedTaskId: task._id });
+  await Promise.all(assignees.filter((assignee) => String(assignee._id) !== String(req.user._id)).map((assignee) => notifyUser({ userId: assignee._id, title: 'New task assigned', message: `${req.user.name} assigned you “${task.title}”.`, type: 'task', relatedTaskId: task._id })));
   const result = await populateTask(task._id);
   res.status(201).json({ data: { task: taskDto(result) } });
 }));
@@ -134,8 +150,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req, res) => {
 router.patch('/:id/status', requireAuth, validateBody(statusSchema), asyncHandler(async (req, res) => {
   const task = await findTask(req.params.id);
   if (!task) throw notFound('Task not found.');
-  const taskAssigneeId = task.assigneeId?._id || task.assigneeId;
-  if (req.user.role !== 'Admin' && String(taskAssigneeId || '') !== String(req.user._id)) throw forbidden('Employees can update status only on tasks assigned to them.');
+  if (req.user.role !== 'Admin' && !(await canReadTask(task, req.user))) throw forbidden('Employees can update status only on tasks assigned to them.');
   const previousStatus = task.status;
   task.status = req.validatedBody.status;
   await task.save();
@@ -150,21 +165,22 @@ router.patch('/:id', requireAuth, requireRole('Admin'), validateBody(updateSchem
   const task = await Task.findOne({ $or: [{ taskCode: req.params.id }, ...(isObjectId(req.params.id) ? [{ _id: req.params.id }] : [])] });
   if (!task) throw notFound('Task not found.');
   const input = req.validatedBody;
-  const previousAssignee = task.assigneeId ? String(task.assigneeId) : '';
+  const previousAssignees = new Set((task.assigneeIds?.length ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : [])).map((assignee) => String(assignee._id || assignee)));
   if (Object.hasOwn(input, 'title')) task.title = input.title;
   if (Object.hasOwn(input, 'description')) task.description = input.description;
   if (Object.hasOwn(input, 'team')) task.team = await validateTeam(input.team);
   if (Object.hasOwn(input, 'priority')) task.priority = input.priority;
   if (Object.hasOwn(input, 'status')) task.status = input.status;
   if (Object.hasOwn(input, 'dueDate')) task.dueDate = parseDueDate(input.dueDate);
-  if (Object.hasOwn(input, 'assigneeId') || Object.hasOwn(input, 'assignee')) {
-    const assignee = await resolveAssignee(input);
-    task.assigneeId = assignee?._id || null;
+  if (Object.hasOwn(input, 'assigneeIds') || Object.hasOwn(input, 'assigneeId') || Object.hasOwn(input, 'assignee')) {
+    const assignees = await resolveAssignees(input);
+    task.assigneeIds = assignees.map((assignee) => assignee._id);
+    task.assigneeId = assignees[0]?._id || null;
   }
   await task.save();
   await logActivity({ actorId: req.user._id, action: 'task_updated', entityType: 'task', entityId: task.taskCode, summary: `${req.user.name} updated ${task.title}` });
-  const freshAssigneeId = task.assigneeId ? String(task.assigneeId) : '';
-  if (freshAssigneeId && freshAssigneeId !== previousAssignee && freshAssigneeId !== String(req.user._id)) await notifyUser({ userId: freshAssigneeId, title: 'New task assigned', message: `${req.user.name} assigned you “${task.title}”.`, type: 'task', relatedTaskId: task._id });
+  const freshAssignees = task.assigneeIds || [];
+  await Promise.all(freshAssignees.filter((assigneeId) => !previousAssignees.has(String(assigneeId)) && String(assigneeId) !== String(req.user._id)).map((assigneeId) => notifyUser({ userId: assigneeId, title: 'New task assigned', message: `${req.user.name} assigned you “${task.title}”.`, type: 'task', relatedTaskId: task._id })));
   const result = await populateTask(task._id);
   res.json({ data: { task: taskDto(result) } });
 }));

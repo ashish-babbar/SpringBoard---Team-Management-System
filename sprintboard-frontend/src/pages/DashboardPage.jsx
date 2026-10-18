@@ -37,7 +37,7 @@ export default function DashboardPage() {
     return () => { active = false; };
   }, [isDemo]);
   const employee = user?.role === "Employee";
-  const mine = tasks.filter((t) => t.assigneeId === user?.id || t.assignee === user?.name);
+  const mine = tasks.filter((task) => task.assigneeIds?.includes(String(user?.id || user?._id)) || task.assignees?.some((assignee) => String(assignee.id || assignee._id) === String(user?.id || user?._id)) || task.assigneeId === user?.id || task.assignee === user?.name);
   const visible = employee ? mine : tasks;
   const done = visible.filter((t) => ["Done", "Completed"].includes(t.status)).length;
   const active = visible.filter((t) => t.status === "In progress" || t.status === "In Progress").length;

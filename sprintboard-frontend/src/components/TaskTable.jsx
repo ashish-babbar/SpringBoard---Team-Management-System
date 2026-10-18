@@ -16,7 +16,7 @@ export default function TaskTable({ tasks, search = "", showFilters = true, empl
   const [sort, setSort] = useState("dueDate");
   const visible = useMemo(() => tasks.filter((task) => {
     const query = search.toLowerCase().trim();
-    const text = `${task.title} ${task.id} ${task.team} ${task.assignee}`.toLowerCase();
+    const text = `${task.title} ${task.id} ${task.team} ${task.assignees?.map((assignee) => assignee.name).join(" ") || task.assignee}`.toLowerCase();
     return (!query || text.includes(query))
       && (status === "All statuses" || task.status === status)
       && (priority === "All priorities" || task.priority === priority);
@@ -39,7 +39,7 @@ export default function TaskTable({ tasks, search = "", showFilters = true, empl
       <thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due date</th><th aria-label="Actions" /></tr></thead>
       <tbody>{visible.map((task) => <tr key={task.id || task._id}>
         <td><Link to={`/tasks/${task.id || task._id}`} className="task-link"><span className="task-id">{task.id || task._id}</span><strong>{task.title}</strong><small>{task.team || "General"}</small></Link></td>
-        <td><span className="assignee-cell"><Avatar user={{ name: task.assignee, avatarUrl: task.assigneeAvatar }} size="xs"/><span>{task.assignee || "Unassigned"}</span></span></td>
+        <td><span className="assignee-cell"><Avatar user={{ name: task.assignees?.[0]?.name || task.assignee, avatarUrl: task.assignees?.[0]?.avatarUrl || task.assigneeAvatar }} size="xs"/><span>{task.assignees?.map((assignee) => assignee.name).join(", ") || task.assignee || "Unassigned"}</span></span></td>
         <td><PriorityBadge priority={task.priority}/></td>
         <td>{employeeMode && onStatusChange ? <label className="inline-status"><span className="sr-only">Update task status</span><select value={task.status} onChange={(e) => onStatusChange(task, e.target.value)}><option>Todo</option><option>In progress</option><option>Done</option></select></label> : <StatusBadge status={task.status}/>}</td>
         <td><span className="date-cell"><CalendarDays size={14}/>{dateLabel(task.dueDate)}</span></td>

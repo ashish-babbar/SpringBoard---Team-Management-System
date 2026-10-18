@@ -25,18 +25,21 @@ function Field({ label, children, hint }) {
 
 function TaskModal({ onClose }) {
   const { createTask, teams, members, user } = useWorkspace();
-  const [form, setForm] = useState({ title: "", description: "", team: teams[0]?.name || "", assignee: user?.name || "", priority: "Medium", status: "Todo", dueDate: "" });
+  const [form, setForm] = useState({ title: "", description: "", team: teams[0]?.name || "", assigneeIds: members.some((member) => String(member.id || member._id) === String(user?.id || user?._id)) ? [String(user?.id || user?._id)] : [], priority: "Medium", status: "Todo", dueDate: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const change = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }));
+  const toggleAssignee = (id) => setForm((old) => ({
+    ...old,
+    assigneeIds: old.assigneeIds.includes(id) ? old.assigneeIds.filter((assigneeId) => assigneeId !== id) : [...old.assigneeIds, id]
+  }));
   const submit = async (event) => {
     event.preventDefault(); setError("");
     if (form.title.trim().length < 3) { setError("Enter a task title with at least 3 characters."); return; }
     if (form.dueDate && Number.isNaN(Date.parse(form.dueDate))) { setError("Choose a valid due date."); return; }
     setSaving(true);
     try {
-      const assignee = members.find((m) => m.name === form.assignee);
-      await createTask({ ...form, title: form.title.trim(), description: form.description.trim(), assigneeId: assignee?.id || assignee?._id || "", attachments: [] });
+      await createTask({ ...form, title: form.title.trim(), description: form.description.trim(), attachments: [] });
       onClose();
     } catch (e) { setError(e.message || "Task could not be created."); }
     finally { setSaving(false); }
@@ -47,7 +50,13 @@ function TaskModal({ onClose }) {
       <Field label="Description"><textarea maxLength={3000} rows={3} value={form.description} onChange={change("description")} placeholder="What needs to be done?"/></Field>
       <div className="form-grid-two">
         <Field label="Team"><select value={form.team} onChange={change("team")}>{teams.map((t) => <option key={t.id || t._id || t.name}>{t.name}</option>)}</select></Field>
-        <Field label="Assignee"><select value={form.assignee} onChange={change("assignee")}><option value="">Unassigned</option>{members.map((m) => <option key={m.id || m._id} value={m.name}>{m.name}</option>)}</select></Field>
+        <div className="form-field"><span>Assignees ({form.assigneeIds.length} selected)</span>
+          <div className="assignee-picker">{members.map((member) => {
+            const id = String(member.id || member._id);
+            const selected = form.assigneeIds.includes(id);
+            return <label className="assignee-option" key={id}><input type="checkbox" checked={selected} disabled={form.assigneeIds.length >= 50 && !selected} onChange={() => toggleAssignee(id)}/><Avatar user={member} size="xs"/><span>{member.name}</span></label>;
+          })}</div>
+        </div>
         <Field label="Priority"><select value={form.priority} onChange={change("priority")}><option>High</option><option>Medium</option><option>Low</option></select></Field>
         <Field label="Due date"><input type="date" value={form.dueDate} onChange={change("dueDate")} min={new Date().toISOString().slice(0, 10)}/></Field>
       </div>

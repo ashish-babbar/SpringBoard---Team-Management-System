@@ -11,9 +11,10 @@ router.get('/:publicId', requireAuth, asyncHandler(async (req, res, next) => {
   const asset = await FileAsset.findOne({ publicId: req.params.publicId });
   if (!asset) throw notFound('File not found.');
   if (asset.category === 'taskAttachment') {
-    const task = await Task.findById(asset.taskId).select('assigneeId');
+    const task = await Task.findById(asset.taskId).select('assigneeId assigneeIds');
     if (!task) throw notFound('File not found.');
-    const assigned = task.assigneeId && String(task.assigneeId) === String(req.user._id);
+    const assigneeIds = task.assigneeIds?.length ? task.assigneeIds : (task.assigneeId ? [task.assigneeId] : []);
+    const assigned = assigneeIds.some((id) => String(id) === String(req.user._id));
     if (req.user.role !== 'Admin' && !assigned) throw forbidden('You do not have access to this attachment.');
   }
   const filePath = await resolveFilePath(asset);

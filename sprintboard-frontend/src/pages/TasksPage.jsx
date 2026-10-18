@@ -8,7 +8,7 @@ export default function TasksPage({ mine = false }) {
   const { tasks, user, updateStatus } = useWorkspace();
   const { search, setTaskModal } = useOutletContext();
   const employee = user?.role === "Employee";
-  const visible = mine || employee ? tasks.filter((task) => task.assigneeId === user?.id || task.assignee === user?.name) : tasks;
+  const visible = mine || employee ? tasks.filter((task) => task.assigneeIds?.includes(String(user?.id || user?._id)) || task.assignees?.some((assignee) => String(assignee.id || assignee._id) === String(user?.id || user?._id)) || task.assigneeId === user?.id || task.assignee === user?.name) : tasks;
   const title = mine || employee ? "My tasks" : "All tasks";
   const update = async (task, status) => {
     if (user?.role !== "Employee") return;
