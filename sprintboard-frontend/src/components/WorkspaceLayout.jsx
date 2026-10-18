@@ -28,11 +28,14 @@ function TaskModal({ onClose }) {
   const [form, setForm] = useState({ title: "", description: "", team: teams[0]?.name || "", assigneeIds: members.some((member) => String(member.id || member._id) === String(user?.id || user?._id)) ? [String(user?.id || user?._id)] : [], priority: "Medium", status: "Todo", dueDate: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
   const change = (key) => (event) => setForm((old) => ({ ...old, [key]: event.target.value }));
   const toggleAssignee = (id) => setForm((old) => ({
     ...old,
     assigneeIds: old.assigneeIds.includes(id) ? old.assigneeIds.filter((assigneeId) => assigneeId !== id) : [...old.assigneeIds, id]
   }));
+  const selectedMembers = members.filter((member) => form.assigneeIds.includes(String(member.id || member._id)));
+  const filteredMembers = members.filter((member) => `${member.name} ${member.email || ""} ${member.team || ""} ${member.role || ""}`.toLowerCase().includes(memberSearch.trim().toLowerCase()));
   const submit = async (event) => {
     event.preventDefault(); setError("");
     if (form.title.trim().length < 3) { setError("Enter a task title with at least 3 characters."); return; }
@@ -50,16 +53,30 @@ function TaskModal({ onClose }) {
       <Field label="Description"><textarea maxLength={3000} rows={3} value={form.description} onChange={change("description")} placeholder="What needs to be done?"/></Field>
       <div className="form-grid-two">
         <Field label="Team"><select value={form.team} onChange={change("team")}>{teams.map((t) => <option key={t.id || t._id || t.name}>{t.name}</option>)}</select></Field>
-        <div className="form-field"><span>Assignees ({form.assigneeIds.length} selected)</span>
-          <div className="assignee-picker">{members.map((member) => {
-            const id = String(member.id || member._id);
-            const selected = form.assigneeIds.includes(id);
-            return <label className="assignee-option" key={id}><input type="checkbox" checked={selected} disabled={form.assigneeIds.length >= 50 && !selected} onChange={() => toggleAssignee(id)}/><Avatar user={member} size="xs"/><span>{member.name}</span></label>;
-          })}</div>
-        </div>
         <Field label="Priority"><select value={form.priority} onChange={change("priority")}><option>High</option><option>Medium</option><option>Low</option></select></Field>
         <Field label="Due date"><input type="date" value={form.dueDate} onChange={change("dueDate")} min={new Date().toISOString().slice(0, 10)}/></Field>
       </div>
+      <section className="assignee-section" aria-labelledby="assignee-heading">
+        <div className="assignee-heading"><div><h3 id="assignee-heading">Assign to people</h3><p>Select the team members responsible for this task.</p></div><span className="assignee-count">{selectedMembers.length} selected</span></div>
+        {selectedMembers.length > 0 && <div className="assignee-selected" aria-label="Selected assignees">{selectedMembers.map((member) => {
+          const id = String(member.id || member._id);
+          return <span className="assignee-chip" key={id}><Avatar user={member} size="xs"/><span>{member.name}</span><button type="button" aria-label={`Remove ${member.name}`} onClick={() => toggleAssignee(id)}><X size={13}/></button></span>;
+        })}</div>}
+        <label className="assignee-search"><Search size={15}/><span className="sr-only">Search members by name, email, team, or role</span><input type="search" value={memberSearch} onChange={(event) => setMemberSearch(event.target.value)} placeholder="Search name, email, team, or role"/></label>
+        <div className="assignee-picker" role="group" aria-label="Workspace members">
+          {filteredMembers.map((member) => {
+            const id = String(member.id || member._id);
+            const selected = form.assigneeIds.includes(id);
+            return <label className={`assignee-option${selected ? " selected" : ""}`} key={id}>
+              <input type="checkbox" checked={selected} disabled={form.assigneeIds.length >= 50 && !selected} onChange={() => toggleAssignee(id)}/>
+              <Avatar user={member} size="sm"/>
+              <span className="assignee-option-info"><strong>{member.name}</strong><small>{member.email || "No email available"}</small><span className="assignee-option-meta">{member.team || "No team"}{member.role ? ` · ${member.role}` : ""}</span></span>
+              {selected && <Check size={17} className="assignee-selected-check" aria-hidden="true"/>}
+            </label>;
+          })}
+          {filteredMembers.length === 0 && <p className="assignee-empty">No members match “{memberSearch}”.</p>}
+        </div>
+      </section>
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="modal-footer"><span><ShieldCheck size={14}/> Task access is enforced by the API.</span><div><button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button><button disabled={saving} className="btn btn-primary" type="submit">{saving ? "Creating…" : "Create task"}</button></div></div>
     </form>
